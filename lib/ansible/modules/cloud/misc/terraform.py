@@ -49,6 +49,10 @@ options:
         If this is not specified, the default `terraform.tfstate` will be used.
       - This option is ignored when plan is specified.
     required: false
+  backend_config_file:
+    description:
+      - The path to a backend config file for Terraform to use for init.
+    required: false
   variables_file:
     description:
       - The path to a variables file for Terraform to fill into the TF
@@ -158,9 +162,9 @@ def _state_args(state_file):
     return []
 
 
-def init_plugins(bin_path, project_path):
+def init_plugins(bin_path, project_path, init_args):
     command = [bin_path, 'init']
-    rc, out, err = module.run_command(command, cwd=project_path)
+    rc, out, err = module.run_command(command + init_args, cwd=project_path)
     if rc != 0:
         module.fail_json(msg="Failed to initialize Terraform modules:\r\n{0}".format(err))
 
@@ -196,6 +200,7 @@ def main():
             state=dict(default='present', choices=['present', 'absent', 'planned']),
             variables=dict(type='dict'),
             variables_file=dict(type='path'),
+            backend_config_file=dict(type='path'),
             plan_file=dict(type='path'),
             state_file=dict(type='path'),
             targets=dict(type='list', default=[]),
@@ -212,6 +217,7 @@ def main():
     state = module.params.get('state')
     variables = module.params.get('variables') or {}
     variables_file = module.params.get('variables_file')
+    backend_config_file = module.params.get('backend_config_file')
     plan_file = module.params.get('plan_file')
     state_file = module.params.get('state_file')
     force_init = module.params.get('force_init')
@@ -221,10 +227,8 @@ def main():
     else:
         command = [module.get_bin_path('terraform', required=True)]
 
-    if force_init:
-        init_plugins(command[0], project_path)
-
     variables_args = []
+    init_args = []
     for k, v in variables.items():
         variables_args.extend([
             '-var',
@@ -232,6 +236,12 @@ def main():
         ])
     if variables_file:
         variables_args.extend(['-var-file', variables_file])
+
+    if backend_config_file:
+        init_args.extend(['-backend-config', backend_config_file])
+
+    if force_init:
+        init_plugins(command[0], project_path, init_args)
 
     preflight_validation(command[0], project_path, variables_args)
 
